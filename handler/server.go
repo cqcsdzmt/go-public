@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"go-public/common"
+	"io"
 	"net"
 	"os"
 )
@@ -37,7 +38,7 @@ func ServeForever() {
 
 func handleClientConnection(conn net.Conn) {
 	defer conn.Close()
-	buf := make([]byte, ServerMaxRecvPacketSize)
+	buf := make([]byte, 1)
 	_, err := conn.Read(buf)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -45,14 +46,14 @@ func handleClientConnection(conn net.Conn) {
 	}
 	switch buf[0] {
 	case HelloPacket:
-		handleHelloPacket(conn, buf)
+		handleHelloPacket(conn)
 	case ConnPacket:
-		handleConnPacket(conn, buf)
+		handleConnPacket(conn)
 	}
 }
 
-func handleHelloPacket(conn net.Conn, buf []byte) {
-	okay, port := parseHelloPacket(buf)
+func handleHelloPacket(conn net.Conn) {
+	okay, port := parseHelloPacket(conn)
 	if !okay {
 		return
 	}
@@ -84,8 +85,13 @@ func handleHelloPacket(conn net.Conn, buf []byte) {
 	}
 }
 
-func handleConnPacket(conn net.Conn, buf []byte) {
-	uuid := common.Bytes2Token(buf[1 : 1+tokenSize])
+func handleConnPacket(conn net.Conn) {
+	token := make([]byte, tokenSize)
+	n, err := io.ReadFull(conn, token)
+	if n != tokenSize || err != nil {
+		return
+	}
+	uuid := common.Bytes2Token(token)
 	userConn := store.get(uuid)
 	store.remove(uuid)
 	if userConn == nil {

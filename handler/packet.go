@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"go-public/common"
+	"io"
 	"net"
 )
 
@@ -14,9 +15,8 @@ var (
 )
 
 var (
-	HelloPacketSize         = 1 + 2 + tokenSize
-	ConnPacketSize          = 1 + tokenSize
-	ServerMaxRecvPacketSize = HelloPacketSize
+	HelloPacketSize = 1 + 2 + tokenSize
+	ConnPacketSize  = 1 + tokenSize
 )
 
 func sendHelloPacket(conn net.Conn, remotePort int) error {
@@ -31,17 +31,30 @@ func sendHelloPacket(conn net.Conn, remotePort int) error {
 	return err
 }
 
-func parseHelloPacket(buf []byte) (ok bool, port int) {
-	port = int(buf[1])<<8 + int(buf[2])
-	if port == common.ServerConfig.Port {
-		fmt.Println("Invalid port:", port)
+func parseHelloPacket(conn net.Conn) (bool, int) {
+	port := make([]byte, 2)
+	n, err := io.ReadFull(conn, port)
+	if n != 2 || err != nil {
 		return false, 0
 	}
-	token := common.Bytes2Token(buf[3 : 3+tokenSize])
-	if token == common.ServerConfig.Token {
-		return true, port
+
+	portNumber := int(port[0])<<8 + int(port[1])
+	if portNumber == common.ServerConfig.Port {
+		fmt.Println("Invalid port:", portNumber)
+		return false, 0
 	}
-	fmt.Println("Invalid token:", token)
+
+	token := make([]byte, tokenSize)
+	n, err = io.ReadFull(conn, token)
+	if n != tokenSize || err != nil {
+		return false, 0
+	}
+
+	tokenString := common.Bytes2Token(token)
+	if tokenString == common.ServerConfig.Token {
+		return true, portNumber
+	}
+	fmt.Println("Invalid token:", tokenString)
 	return false, 0
 }
 
